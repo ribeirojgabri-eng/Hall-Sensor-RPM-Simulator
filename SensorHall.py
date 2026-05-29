@@ -8,7 +8,7 @@ pygame.init()
 
 WIDTH, HEIGHT = 640, 480
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Concept S - Corrected Hall Sensor Prototype")
+pygame.display.set_caption("Concept S - Hall Sensor Prototype (Corrected)")
 
 # Colors
 COLOR_BG = (15, 15, 15)
@@ -22,18 +22,18 @@ COLOR_ALERT = (255, 180, 0)
 
 # Physics and logic
 RPM_MAX = 6500.0
-RPM_ACCEL_PER_SECOND = 2500.0
-RPM_DECEL_PER_SECOND = 1800.0
+ACCELERATION_RPM_PER_SEC = 2500.0
+DECELERATION_RPM_PER_SEC = 1800.0
 
-rpm_speed = 0.0
-total_angle = 0.0          # Accumulated angle, not limited to 360
-counted_rotations = 0       # Total passes through the sensor
-last_full_rotation = 0      # Used to detect how many turns occurred between frames
+velocity_rpm = 0.0
+total_angle = 0.0           # Accumulated angle, not limited to 360
+rotations_counted = 0       # Total sensor passes
+last_integer_rotation = 0   # Used to detect how many turns occurred between frames
 
-# RPM measurement by counting in a time window
+# RPM measurement via time window counting
 measurement_window = 1.0
 window_start = time.perf_counter()
-rotations_window_start = 0
+rotations_at_window_start = 0
 measured_rpm = 0.0
 
 # Sensor visual effect
@@ -41,7 +41,7 @@ sensor_flash_until = 0.0
 SENSOR_FLASH_DURATION = 0.05
 
 font = pygame.font.SysFont("Arial", 24)
-small_font = pygame.font.SysFont("Arial", 18)
+font_small = pygame.font.SysFont("Arial", 18)
 clock = pygame.time.Clock()
 last_time = time.perf_counter()
 
@@ -52,7 +52,7 @@ while True:
     dt = now - last_time
     last_time = now
 
-    # Prevents huge jumps if the window freezes or is dragged.
+    # Prevent huge jumps if the window hangs or is dragged
     dt = min(dt, 0.1)
 
     for event in pygame.event.get():
@@ -62,43 +62,43 @@ while True:
 
     keys = pygame.key.get_pressed()
     if keys[pygame.K_SPACE]:
-        rpm_speed = min(
-            rpm_speed + RPM_ACCEL_PER_SECOND * dt,
+        velocity_rpm = min(
+            velocity_rpm + ACCELERATION_RPM_PER_SEC * dt,
             RPM_MAX
         )
     else:
-        rpm_speed = max(
-            rpm_speed - RPM_DECEL_PER_SECOND * dt,
+        velocity_rpm = max(
+            velocity_rpm - DECELERATION_RPM_PER_SEC * dt,
             0.0
         )
 
-    # Correct conversion: RPM -> degrees per second.
-    # 1 rotation = 360 degrees; RPM / 60 = rotations per second.
-    degrees_per_second = rpm_speed * 360.0 / 60.0
+    # Correct conversion: RPM -> degrees per second
+    # 1 rotation = 360 degrees; RPM / 60 = rotations per second
+    degrees_per_second = velocity_rpm * 360.0 / 60.0
     total_angle += degrees_per_second * dt
     visual_angle = total_angle % 360.0
 
-    # Correct count of rotations/passes through the sensor.
-    # At high RPM, more than 1 pass can occur between two frames.
-    current_full_rotation = int(total_angle // 360.0)
-    new_rotations = current_full_rotation - last_full_rotation
+    # Correct rotation/sensor pass counting
+    # At high RPM, more than 1 pass can occur between two frames
+    current_integer_rotation = int(total_angle // 360.0)
+    new_rotations = current_integer_rotation - last_integer_rotation
 
     if new_rotations > 0:
-        counted_rotations += new_rotations
-        last_full_rotation = current_full_rotation
+        rotations_counted += new_rotations
+        last_integer_rotation = current_integer_rotation
         sensor_flash_until = now + SENSOR_FLASH_DURATION
 
-    # Measures the actual RPM counted within a 1-second window.
+    # Measure real RPM counted in a 1-second window
     if now - window_start >= measurement_window:
-        rotations_in_window = counted_rotations - rotations_window_start
+        rotations_in_window = rotations_counted - rotations_at_window_start
         measured_rpm = rotations_in_window * 60.0 / (now - window_start)
         window_start = now
-        rotations_window_start = counted_rotations
+        rotations_at_window_start = rotations_counted
 
-    # The sensor turns green when it just detected a pass or when the magnet is close.
+    # Sensor turns green when it just detected a pass or when the magnet is close
     sensor_near_zero = visual_angle < 15.0 or visual_angle > 345.0
-    sensor_detected_now = now < sensor_flash_until
-    current_sensor_color = COLOR_SENSOR_ACTIVE if (sensor_near_zero or sensor_detected_now) else COLOR_SENSOR_INACTIVE
+    sensor_just_detected = now < sensor_flash_until
+    current_sensor_color = COLOR_SENSOR_ACTIVE if (sensor_near_zero or sensor_just_detected) else COLOR_SENSOR_INACTIVE
 
     # Drawing
     screen.fill(COLOR_BG)
@@ -113,17 +113,17 @@ while True:
 
     pygame.draw.rect(screen, current_sensor_color, (center[0] + 90, center[1] - 40, 10, 80))
 
-    hud_color = COLOR_REVCUT if rpm_speed >= 6400 else COLOR_SENSOR_ACTIVE
-    if abs(measured_rpm - rpm_speed) > 300 and rpm_speed > 1000:
+    hud_color = COLOR_REVCUT if velocity_rpm >= 6400 else COLOR_SENSOR_ACTIVE
+    if abs(measured_rpm - velocity_rpm) > 300 and velocity_rpm > 1000:
         measured_rpm_color = COLOR_ALERT
     else:
         measured_rpm_color = COLOR_SENSOR_ACTIVE
 
-    txt_target_rpm = font.render(f"Target RPM: {int(rpm_speed)} / {int(RPM_MAX)}", True, hud_color)
-    txt_measured_rpm = font.render(f"Sensor Counted RPM: {int(measured_rpm)}", True, measured_rpm_color)
-    txt_count = font.render(f"Counted passes/rotations: {counted_rotations}", True, COLOR_TEXT)
+    txt_target_rpm = font.render(f"Target RPM: {int(velocity_rpm)} / {int(RPM_MAX)}", True, hud_color)
+    txt_measured_rpm = font.render(f"Sensor Measured RPM: {int(measured_rpm)}", True, measured_rpm_color)
+    txt_count = font.render(f"Rotations/Passes Counted: {rotations_counted}", True, COLOR_TEXT)
     txt_hint = font.render("HOLD [SPACE] TO ACCELERATE", True, COLOR_TEXT)
-    txt_obs = small_font.render("At 6500 RPM there are ~108.33 passes per second; the simulation counts mathematically between frames.", True, (160, 160, 160))
+    txt_obs = font_small.render("At 6500 RPM, there are ~108.33 passes per second; simulation counts mathematically between frames.", True, (160, 160, 160))
 
     screen.blit(txt_target_rpm, (30, 30))
     screen.blit(txt_measured_rpm, (30, 65))
