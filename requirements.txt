@@ -1,0 +1,13 @@
+## Installation
+
+Install Pygame:
+
+```bash
+pip install pygame
+```
+
+If your system uses Python 3 separately:
+
+```bash
+pip3 install pygame
+```
